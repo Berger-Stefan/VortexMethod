@@ -13,19 +13,19 @@ function ω_0(x)
 end
 
 # grid parameter
-n = 21  # number of particles
+n = 51  # number of particles
 h = 2/(n-1)
 σ = 2*h
-t_domain = [0,00001]
-Δt = 0.00001
+t_domain = [0,1]
+Δt = 0.00005
 t_range = range(t_domain[1], t_domain[2], step=Δt) |> collect
 
 
 # physical parameter
-μ = 0
+μ = 10
 
 # plot parameter
-domain_scaling = 10 
+domain_scaling = 1
 t_runtime = 5
 fps = 50
 frames = 5* 50
@@ -105,8 +105,11 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
             @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
             if r != 0
                 coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
-                @inbounds u1_x += c[j] *  particles[i,2]/r * coef
-                @inbounds u1_y += c[j] * -particles[i,1]/r * coef
+                @inbounds u1_x += c[j] *  (y - particles[j,2])/r * coef
+                @inbounds u1_y += c[j] * -(x - particles[j,1])/r * coef
+                # if i == 1
+                #     @info " " coef * c[j]
+                # end
             end
         end
         for j in 1:n_particles
@@ -115,8 +118,8 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
             @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
             if r != 0
                 coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
-                @inbounds u2_x += c[j] *  particles[i,2]/r * coef
-                @inbounds u2_y += c[j] * -particles[i,1]/r * coef
+                @inbounds u2_x += c[j] *  (y - particles[j,2])/r * coef
+                @inbounds u2_y += c[j] * -(x - particles[j,1])/r * coef
             end
         end
         for j in 1:n_particles
@@ -125,8 +128,8 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
             @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
             if r != 0
                 coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
-                @inbounds u3_x += c[j] *  particles[i,2]/r * coef
-                @inbounds u3_y += c[j] * -particles[i,1]/r * coef
+                @inbounds u3_x += c[j] *  (y - particles[j,2])/r * coef
+                @inbounds u3_y += c[j] * -(x - particles[j,1])/r * coef
             end
         end
         for j in 1:n_particles
@@ -135,8 +138,8 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
             @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
             if r != 0  
                 coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
-                @inbounds u4_x += c[j] *  particles[i,2]/r * coef
-                @inbounds u4_y += c[j] * -particles[i,1]/r * coef
+                @inbounds u4_x += c[j] *  (y - particles[j,2])/r * coef
+                @inbounds u4_y += c[j] * -(x - particles[j,1])/r * coef
             end
         end
 
@@ -269,7 +272,7 @@ end
     end
     
     if any(isnan.(particles))
-        @warn "Instable, braking"
+        @warn "Instable, breaking"
         break
     end
     
@@ -285,8 +288,8 @@ end
 
 # create animation from the calculated data
 anim = @animate for i in 1:round(Int,size(ω_domain_data)[1]/frames+1):size(ω_domain_data)[1]
-    # contour(ω_domain_data[], fill=true)
+    # contour(ω_domain_data[i], fill=true)
     heatmap(LinRange(-1,1,domain_scaling*n), LinRange(-1,1,domain_scaling*n), ω_domain_data[i],margin = 5Plots.mm)
-    title!("t:  " * string(round(i*Δt,digits=4)) *" , h="*string(h)*" , σ="*string(σ)*" , μ="*string(μ)* " , n_particles = "*string(n))
+    title!("t:  " * string(round(i*Δt,digits=4)) *" , h="*string(round(h,digits=3))*" , σ="*string(round(σ,digits=3))*" , μ="*string(μ)* " , n_particles = "*string(n))
 end
-gif(anim, "result.gif", fps = 50)
+gif(anim, "result.gif", fps = 20)
