@@ -19,7 +19,7 @@ $$ \omega (0,\vec{x}) = \omega_0(\vec{x}) $$
 $$ \vec{u} \rightarrow \vec{0} \quad \text{for} \quad |\vec{x}| \rightarrow \infty $$
 
 The shown results are generated with elliptical initial conditions:
-$$ \omega_0(\vec{x}) = \begin{cases} 20 (1 - \frac{|\vec{x}|}{0.8})  & |\vec{x}| < 0.8,\\ 0 & else  \end{cases} $$ 
+$$ \omega_0(\vec{x}) = \begin{cases} 20 (1 - \frac{|\vec{x}|}{0.8})  & |\vec{x}| < 0.8,\newline 0 & else  \end{cases} $$ 
 
 
 
