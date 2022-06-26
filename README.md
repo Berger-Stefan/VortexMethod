@@ -31,7 +31,7 @@ $$ \begin{align*} \frac{d\vec{x}_i}{dt} &= \vec{u}_{h, \sigma}(t, \vec{x}_i(t)) 
 The viscosity of the Navier-Stokes equations can be modeled using the $\mu$ parameter. The trajectories of the particles can be computed using any Runge-Kutta scheme.
 
 $\vec{u}_{h,\sigma}(t ,\vec{x}_i(t))$ and $\omega_{h,\sigma}(t,\vec{x}_i(t))$ are the interpolation functions that are used to evaluate the field outside the particles.
-$$ \begin{align*} \omega_{h,\sigma}(t,\vec{x}_i(t)) &= \sum_{i=1}^{N}\zeta_\sigma(\vec{x}-\vec{x}_i)c_i \newline \vec{u}_{h,\sigma}(t, \vec{x}_i(t)) &= \sum_{i=1}^{N} \vec{K}_\sigma(\vec{x}-\vec{x}_i)c_i \end{align*} $$
+$$ \begin{aligned} \omega_{h,\sigma}(t,\vec{x}_i(t)) &= \sum_{i=1}^{N}\zeta_\sigma(\vec{x}-\vec{x}_i)c_i \newline \vec{u}{h,\sigma}(t, \vec{x}_i(t)) &= \sum_{i=1}^{N} \vec{K}_\sigma(\vec{x}-\vec{x}_i)c_i \end{aligned} $$
 
 The $c_i$ coefficients are the solution to the following eigenvalues problem, which can be interpreted as a sort of least squares problem:
 
@@ -52,8 +52,8 @@ $$ \begin{pmatrix}
        \vdots 
     \end{pmatrix}$$
 
-where $\zeta_\sigma(\vec{x})$ is a kernel function. For this I used the Wendland kernel, since it is a nice compromise between complexity and accuracy.
-$$ \begin{align*} \zeta_\sigma(\vec{x}) &:= \zeta (\frac{\vec{x}}{\sigma}) \newline \zeta(\vec{x}) &:= \bar{\zeta}(|\vec{x}|) \newline \bar{\zeta}(|\vec{x}|) &:= (1-r)^6(35r^2+^18r+3) \end{align*} $$
+Where $\zeta_\sigma(\vec{x})$ is a kernel function. For this I used the Wendland kernel, since it is a nice compromise between complexity and accuracy.
+$$ \begin{aligned} \zeta_\sigma(\vec{x}) &:= \zeta (\frac{\vec{x}}{\sigma}) \newline \zeta(\vec{x}) &:= \bar{\zeta}(|\vec{x}|) \newline \bar{\zeta}(|\vec{x}|) &:= (1-r)^6(35r^2+^18r+3) \end{aligned} $$
 
 (TODO add Velocity Kernel)
 
