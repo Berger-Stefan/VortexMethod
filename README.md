@@ -26,11 +26,12 @@ $$ \omega_0(\vec{x}) = \begin{cases} 20 (1 - \frac{|\vec{x}|}{0.8})  & |\vec{x}|
 # Numerical Method
 The vorticity equations are solved via a particle method with using kernel-based interpolation. One advantage of particle methods, are their semi-analytical nature. The vorticity can be computed exact and from this, the velocity vector will be computed. 
 The evolution of the particles is given by :
+
 $$ \begin{aligned} \frac{d\vec{x}_i}{dt} &= \vec{u}_{h, \sigma}(t, \vec{x}_i(t)) \newline \frac{d\omega_i}{dt} &= \mu\Delta\omega_{h,\sigma}(t, \vec{x}_i(t))\newline \end{aligned} $$ 
 
 The viscosity of the Navier-Stokes equations can be modeled using the $\mu$ parameter. The trajectories of the particles can be computed using any Runge-Kutta scheme.
 
- $\vec{u}_{h,\sigma}(t ,\vec{x}_i(t))$ and $\omega_{h,\sigma}(t,\vec{x}_i(t))$ are the interpolation functions that are used to evaluate the field outside the particles.
+The functions: $\vec{u}_{h,\sigma}(t ,\vec{x}_i(t))$ and $\omega_{h,\sigma}(t,\vec{x}_i(t))$ are the interpolator that are used to evaluate the field outside the particles.
 
 $$ \begin{aligned} \omega_{h,\sigma}(t,\vec{x}_i(t)) &= \sum_{i=1}^{N}\zeta_\sigma(\vec{x}-\vec{x}_i)c_i \newline \vec{u}{h,\sigma}(t, \vec{x}_i(t)) &= \sum_{i=1}^{N} \vec{K}_\sigma(\vec{x}-\vec{x}_i)c_i \end{aligned} $$
 
