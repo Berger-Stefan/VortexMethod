@@ -13,7 +13,7 @@ function ω_0(x)
 end
 
 
-n = 3
+n = 31
 h = 2/(n-1)
 domain = Matrix{Float32}(undef, n,n)
 
@@ -35,8 +35,8 @@ end
 ω_domain_data = []
 push!(ω_domain_data, domain)
 
-t_domain = [0, .1]
-Δt = 0.01
+t_domain = [0,.5]
+Δt = 0.1
 t_range = range(t_domain[1], t_domain[2], step=Δt) |> collect
 
 σ = 2*h
@@ -87,20 +87,60 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
 
         u1_x = 0
         u1_y = 0
-
+        u2_x = 0
+        u2_y = 0
+        u3_x = 0
+        u3_y = 0
+        u4_x = 0
+        u4_y = 0
+    
+        # compute coefficients for RK  
         for j in 1:n_particles
-            @inbounds r = sqrt((particles[i,1]-particles[j,1])^2 + (particles[i,1]-particles[j,2])^2)
-                if r != 0
-                    coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
-                    @inbounds u1_x += c[j] *  particles[i,2]/r * coef
-                    @inbounds u1_y += c[j] * -particles[i,1]/r * coef
-                end
+            x = particles[i,1]
+            y = particles[i,2]
+            @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
+            if r != 0 
+                coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
+                @inbounds u1_x += c[j] *  particles[i,2]/r * coef
+                @inbounds u1_y += c[j] * -particles[i,1]/r * coef
+            end
         end
-        
-        @inbounds particles_update[i,1] = particles[i,1] + Δt*u1_x
-        @inbounds particles_update[i,2] = particles[i,2] + Δt*u1_y
+        for j in 1:n_particles
+            x = particles[i,1] + 0.5*Δt*u1_x
+            y = particles[i,2] + 0.5*Δt*u1_y
+            @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
+            if r != 0 
+                coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
+                @inbounds u2_x += c[j] *  particles[i,2]/r * coef
+                @inbounds u2_y += c[j] * -particles[i,1]/r * coef
+            end
+        end
+        for j in 1:n_particles
+            x = particles[i,1] + 0.5*Δt*u2_x
+            y = particles[i,2] + 0.5*Δt*u2_y
+            @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
+            if r != 0 
+                coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
+                @inbounds u3_x += c[j] *  particles[i,2]/r * coef
+                @inbounds u3_y += c[j] * -particles[i,1]/r * coef
+            end
+        end
+        for j in 1:n_particles
+            x = particles[i,1] + Δt*u3_x
+            y = particles[i,2] + Δt*u3_y
+            @inbounds r = sqrt((x-particles[j,1])^2 + (y-particles[j,2])^2)
+            if r != 0 
+                coef = (-1/r *(2 *r^2 + 4 *r^3 + (25 *r^4)/2 - 4 *r^5 + (5 *r^6)/2 - (6 *r^7)/7 + r^8/8 ))
+                @inbounds u4_x += c[j] *  particles[i,2]/r * coef
+                @inbounds u4_y += c[j] * -particles[i,1]/r * coef
+            end
+        end
 
+        # evolve the system
+        @inbounds particles_update[i,1] = particles[i,1] + Δt/6.0*(u1_x + 2*u2_x + 2*u3_x + u4_x)
+        @inbounds particles_update[i,2] = particles[i,2] + Δt/6.0*(u1_y + 2*u2_y + 2*u3_y + u4_y)
         @inbounds particles_update[i,3] = particles[i,3]
+
     end
 end
 
@@ -131,7 +171,7 @@ end
 # compute_ω_kernel = @cuda launch=false compute_ω!(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland)
 
 # main runtime loop CUDA
-@time for (index,t) in enumerate(t_range)
+@time for (index,t) in enumerate(t_range[1:end-1])
     @info "current Time: \t" t
 
     # # construct system interpolation matrix 
@@ -151,8 +191,6 @@ end
     end
     c = Array(c_gpu)
 
-    # c= sys_matrix\b
-
     # evolve particles
     # begin
     #     # config = launch_configuration(evolve_particles_kernel.fun)
@@ -165,9 +203,6 @@ end
     particles_update = zeros(n_particles,3)
     evolve_particles!(particles, particles_update, c, n_particles, Δt)
     particles = particles_update 
-
-
-
 
     begin
         # config = launch_configuration(compute_ω_kernel.fun)
@@ -184,6 +219,5 @@ end
 # create animation from the calculated data
 anim = @animate for i in 1:size(ω_domain_data)[1]
     contour(ω_domain_data[i], fill=true)
-    # heatmap(ω_domain_data[i])
 end
-gif(anim, "test.gif", fps = 10)
+gif(anim, "test.gif", fps = size(ω_domain_data)[1])
