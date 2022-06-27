@@ -12,61 +12,10 @@ function ω_0(x)
     end
 end
 
-# grid parameter
-n = 51  # number of particles
-h = 2/(n-1)
-σ = 2*h
-t_domain = [0,1]
-Δt = 0.00005
-t_range = range(t_domain[1], t_domain[2], step=Δt) |> collect
-
-
-# physical parameter
-μ = 10
-
-# plot parameter
-domain_scaling = 1
-t_runtime = 5
-fps = 50
-frames = 5* 50
-
-
-x_lin = LinRange(-1,1,n)
-y_lin = LinRange(-1,1,n)
-
-# x | y | ω
-particles = zeros(size(x_lin)[1]*size(y_lin)[1],3)
-particles_update = zeros(size(x_lin)[1]*size(y_lin)[1],3)
-
-global cnt = 1
-for (i,x) in enumerate(x_lin) 
-    for (j,y) in enumerate(y_lin)
-        particles[cnt,:] = vcat([x;y], ω_0([x;2*y]))
-        global cnt = cnt + 1
-    end    
-end    
-
-
-# memory allocations
-sys_matrix = Matrix{Float32}(undef, size(particles)[1], size(particles)[1])
-b = Vector{Float32}(undef, size(particles)[1])
-c = Vector{Float32}(undef, size(particles)[1])
-domain = zeros(domain_scaling*n,domain_scaling*n)
-ω_domain_data = []
-
-# GPU stuff
-sys_matrix_gpu = CuMatrix(sys_matrix)
-b_gpu = CuVector(b)
-c_gpu = CuVector(c)
-particles_gpu = CuMatrix(particles)
-particles_update_gpu = CuMatrix(particles)
-domain_gpu = CuMatrix(domain)
-
 # Kernel function definitions
 
-n_particles = size(particles)[1]
 # this function construct the system matrix and the b-vector on the gpu
-function build_system!(sys_matrix, particles, n_particles)
+function build_system!(sys_matrix, particles, n_particles, σ)
     for i in  1:n_particles
         for j in i:n_particles
             r = sqrt((particles[i,1] - particles[j,1])^2 + (particles[i,2] - particles[j,2])^2)/σ
@@ -82,13 +31,13 @@ function build_system!(sys_matrix, particles, n_particles)
     return nothing
 end
 
-# @time build_system!(sys_matrix, particles, n_particles
-# CUDA.@time @cuda build_system!(sys_matrix_gpu, particles_gpu, n_particles)
+# @time build_system!(sys_matrix, particles, n_particles, σ)
+# CUDA.@time @cuda build_system!(sys_matrix_gpu, particles_gpu, n_particles, σ)
 
 # this function evolves the particles in time using a forward integration scheme TODO implement RK4
-function evolve_particles!(particles, particles_update, c, n_particles, Δt)
+function evolve_particles!(particles, particles_update, c, n_particles, Δt, σ, μ)
     Threads.@threads for i in 1:n_particles     
-
+        
         u1_x = 0
         u1_y = 0
         u2_x = 0
@@ -97,7 +46,7 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
         u3_y = 0
         u4_x = 0
         u4_y = 0
-    
+        
         # compute coefficients for RK  
         for j in 1:n_particles
             x = particles[i,1]
@@ -142,12 +91,12 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
                 @inbounds u4_y += c[j] * -(x - particles[j,1])/r * coef
             end
         end
-
+        
         # evolve the system velocities
         @inbounds particles_update[i,1] = particles[i,1] + Δt/6.0*(u1_x + 2*u2_x + 2*u3_x + u4_x)
         @inbounds particles_update[i,2] = particles[i,2] + Δt/6.0*(u1_y + 2*u2_y + 2*u3_y + u4_y)
-
-
+        
+        
         # evolve change of vorticity
         #   | 1 |   
         # 2 | 3 | 4  
@@ -160,14 +109,15 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
         
         x = particles[i,1]
         y = particles[i,2]
-
+        h = 2/(n_particles-1)
+        
         for k in 1:n_particles
             r = sqrt(( x - particles[k,1])^2 + ( (y+h) - particles[k,2])^2)/σ
             if r < 1
                 ω_1 += c[k] * (1-r)^6 * (35*r^2 + 18*r + 3)
             end
         end
-           for k in 1:n_particles
+        for k in 1:n_particles
             r = sqrt(( x-h - particles[k,1])^2 + ( y - particles[k,2])^2)/σ
             if r < 1
                 ω_2 += c[k] * (1-r)^6 * (35*r^2 + 18*r + 3)
@@ -191,13 +141,13 @@ function evolve_particles!(particles, particles_update, c, n_particles, Δt)
                 ω_5 += c[k] * (1-r)^6 * (35*r^2 + 18*r + 3)
             end
         end
-
+        
         @inbounds particles_update[i,3] = particles[i,3] + Δt*μ*(ω_1 + ω_2 -4*ω_3 +ω_4 +ω_5)/(2*h^2)
     end
 end
 
-# @time evolve_particles!(particles, particles_update, c, n_particles, Δt)
-# CUDA.@time @cuda evolve_particles!(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt)
+# @time evolve_particles!(particles, particles_update, c, n_particles, Δt, σ, μ)
+# CUDA.@time @cuda evolve_particles!(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt, σ, μ)
 
 function compute_ω!(domain, particles ,c ,n_x , n_y, n_particles, σ)
     Δx = 2/(n_x-1)
@@ -217,79 +167,141 @@ end
 # @time compute_ω!(domain, particles, c, n, h, n ,h , n_particles, wendland, σ)
 # CUDA.@elapsed @cuda compute_ω!(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland, σ)
 
-# # compile kernels
-# build_system_kernel = @cuda launch=false  build_system!(sys_matrix_gpu, b_gpu, particles_gpu, n_particles,wendland)
-# evolve_particles_kernel = @cuda launch=false evolve_particles!(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt)
-# compute_ω_kernel = @cuda launch=false compute_ω!(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland)
 
-# main runtime loop CUDA
-@time for (index,t) in enumerate(t_range[1:end-1])
-    @info "current time step: \t" t
+function main()
+    
+    # grid parameter
+    n = 51  # number of particles
+    h = 2/(n-1)
+    σ = 2*h
+    t_domain = [0,1]
+    Δt = 0.00005
+    t_range = range(t_domain[1], t_domain[2], step=Δt) |> collect
+    x_lin = LinRange(-1,1,n)
+    y_lin = LinRange(-1,1,n)
+    
+    
+    # physical parameter
+    μ = 0.0
+    
+    # plot parameter
+    domain_scaling = 3
+    t_runtime = 5
+    fps = 50
+    frames = 5* 50
+    
+    
+    # memory allocations
+    # x | y | ω
+    particles = zeros(size(x_lin)[1]*size(y_lin)[1],3)
+    particles_update = zeros(size(x_lin)[1]*size(y_lin)[1],3)
+    n_particles = size(particles)[1]
+    
+    sys_matrix = Matrix{Float32}(undef, size(particles)[1], size(particles)[1])
+    b = Vector{Float32}(undef, size(particles)[1])
+    c = Vector{Float32}(undef, size(particles)[1])
+    domain = zeros(domain_scaling*n,domain_scaling*n)
+    ω_domain_data = []
 
-    # # construct system interpolation matrix 
-    # begin # cpu version is faster right now
-        # config = launch_configuration(build_system_kernel.fun)
-        # threads = min(n_particles, config.threads)
-        # blocks = cld(n_particles, threads)
-        # build_system_kernel(sys_matrix_gpu, b_gpu, particles_gpu, n_particles; threads, blocks) 
+    # GPU stuff
+    sys_matrix_gpu = CuMatrix(sys_matrix)
+    b_gpu = CuVector(b)
+    c_gpu = CuVector(c)
+    particles_gpu = CuMatrix(particles)
+    particles_update_gpu = CuMatrix(particles)
+    domain_gpu = CuMatrix(domain)
+
+    
+    global cnt = 1
+    for (i,x) in enumerate(x_lin) 
+        for (j,y) in enumerate(y_lin)
+            particles[cnt,:] = vcat([x;y], ω_0([x;2*y]))
+            global cnt = cnt + 1
+        end    
+    end    
+
+    
+    # # compile kernels
+    # build_system_kernel = @cuda launch=false  build_system!(sys_matrix_gpu, b_gpu, particles_gpu, n_particles,wendland)
+    # evolve_particles_kernel = @cuda launch=false evolve_particles!(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt)
+    # compute_ω_kernel = @cuda launch=false compute_ω!(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland)
+    
+    # main runtime loop CUDA
+    @time for (index,t) in enumerate(t_range[1:end-1])
+        @info "current time step: \t" t
+    
+        # # construct system interpolation matrix 
+        # begin # cpu version is faster right now
+            # config = launch_configuration(build_system_kernel.fun)
+            # threads = min(n_particles, config.threads)
+            # blocks = cld(n_particles, threads)
+            # build_system_kernel(sys_matrix_gpu, b_gpu, particles_gpu, n_particles; threads, blocks) 
+            # end
+        @time begin
+            build_system!(sys_matrix,  particles, n_particles, σ)   
+            b = particles[:,3]
+            @info "system build"
+        end
+    
+        # compute interpolation coefficient  
+        CUDA.@time begin 
+            sys_matrix_gpu = CuMatrix(sys_matrix)
+            b_gpu = CuVector(b)
+            c_gpu = sys_matrix_gpu \  b_gpu
+            c = Array(c_gpu)
+            @info "system solved"
+        end
+    
+        # evolve particles
+        # begin
+        #     # config = launch_configuration(evolve_particles_kernel.fun)
+        #     # threads = min(n_particles, config.threads)
+        #     # blocks = cld(n_particles, threads)
+        #     # CUDA.@elapsed evolve_particles_kernel(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt)
+        #     # particles_gpu = particles_update_gpu
         # end
-    @time begin
-        build_system!(sys_matrix,  particles, n_particles)   
-        b = particles[:,3]
-        @info "system build"
-    end
-
-    # compute interpolation coefficient  
-    CUDA.@time begin 
-        sys_matrix_gpu = CuMatrix(sys_matrix)
-        b_gpu = CuVector(b)
-        c_gpu = sys_matrix_gpu \  b_gpu
-        c = Array(c_gpu)
-        @info "system solved"
-    end
-
-    # evolve particles
-    # begin
-    #     # config = launch_configuration(evolve_particles_kernel.fun)
-    #     # threads = min(n_particles, config.threads)
-    #     # blocks = cld(n_particles, threads)
-    #     # CUDA.@elapsed evolve_particles_kernel(particles_gpu, particles_update_gpu, c_gpu, n_particles, Δt)
-    #     # particles_gpu = particles_update_gpu
-    # end
-
-    @time begin 
-        particles_update = zeros(n_particles,3)
-        evolve_particles!(particles, particles_update, c, n_particles, Δt)
-        particles = particles_update 
-        @info "particles evolved"
-    end
-
-    begin
-        # config = launch_configuration(compute_ω_kernel.fun)
-        # threads = min(n_particles, config.threads)
-        # blocks = cld(n_particles, threads)
-        # CUDA.@elapsed compute_ω_kernel(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland)
+    
+        @time begin 
+            particles_update = zeros(n_particles,3)
+            evolve_particles!(particles, particles_update, c, n_particles, Δt, σ, μ)
+            particles = particles_update 
+            @info "particles evolved"
+        end
+    
+        begin
+            # config = launch_configuration(compute_ω_kernel.fun)
+            # threads = min(n_particles, config.threads)
+            # blocks = cld(n_particles, threads)
+            # CUDA.@elapsed compute_ω_kernel(domain_gpu, particles_gpu, c_gpu, n, h, n ,h , n_particles, wendland)
+        end
+        
+        if any(isnan.(particles))
+            @warn "Unstable, breaking"
+            break
+        end
+        
+        @time begin 
+            domain = zeros(domain_scaling*n,domain_scaling*n)
+            compute_ω!(domain, particles, c, domain_scaling*n, domain_scaling*n , n_particles, σ)
+            push!(ω_domain_data, Array(domain))
+            @info "ω constructed"
+        end
+    
+        print("\n\n\n")
     end
     
-    if any(isnan.(particles))
-        @warn "Instable, breaking"
-        break
-    end
+
     
-    @time begin 
-        domain = zeros(domain_scaling*n,domain_scaling*n)
-        compute_ω!(domain, particles, c, domain_scaling*n, domain_scaling*n , n_particles, σ)
-        push!(ω_domain_data, Array(domain))
-        @info "ω constructed"
-    end
+    
+    # create animation from the calculated data
+    # anim = @animate for i in 1:round(Int,size(ω_domain_data)[1]/frames+1):size(ω_domain_data)[1]
+        anim = @animate for i in 1:size(ω_domain_data)[1]
+        # contour(ω_domain_data[i], fill=true)    
+        heatmap(LinRange(-1,1,domain_scaling*n), LinRange(-1,1,domain_scaling*n), ω_domain_data[i],margin = 5Plots.px, size=(600,500), clim=(0,20), c = cgrad(:haline, rev = true),
+        background_color=:transparent, foreground_color=:white, ticks = false, dpi = 100)
+        # title!("\nt:  " * string(round(i*Δt,digits=4)) *" , h="*string(round(h,digits=3))*" , σ="*string(round(σ,digits=3))*" , μ="*string(μ)* " , n_particles = "*string(n^2)*" \n")
+    end    
+    gif(anim, "result.gif", fps = 50)
+end    
 
-    print("\n\n\n")
-end
-
-# create animation from the calculated data
-anim = @animate for i in 1:round(Int,size(ω_domain_data)[1]/frames+1):size(ω_domain_data)[1]
-    # contour(ω_domain_data[i], fill=true)
-    heatmap(LinRange(-1,1,domain_scaling*n), LinRange(-1,1,domain_scaling*n), ω_domain_data[i],margin = 5Plots.mm)
-    title!("t:  " * string(round(i*Δt,digits=4)) *" , h="*string(round(h,digits=3))*" , σ="*string(round(σ,digits=3))*" , μ="*string(μ)* " , n_particles = "*string(n))
-end
-gif(anim, "result.gif", fps = 20)
+main()
