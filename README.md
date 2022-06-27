@@ -3,7 +3,7 @@ This is a solver for the vorticity transport equation. The vorticity equations a
 
 <br />
 <p align="center">
-    <img src="./Results/readme.gif" width="300" height="250">
+    <img src="./Results/slow_long.mp4" width="300" height="250">
     <center><em><font size="+1">This result was generated with this solver. It shows the evolution of vorticities.
   </em></center></font>
 </p>
